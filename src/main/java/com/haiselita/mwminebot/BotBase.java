@@ -34,6 +34,9 @@ public abstract class BotBase {
     protected static final int BLOCKED = 3;
 
     private static final long DIG_TIMEOUT_MS = 5000L;
+
+    /** Most extra time a slow block can add on top of DIG_TIMEOUT_MS. */
+    private static final long MAX_EXTRA_DIG_MS = 30000L;
     private static final long MOVE_TIMEOUT_MS = 2000L;
     private static final float AIM_TOLERANCE_DEG = 2.0f;
 
@@ -100,6 +103,7 @@ public abstract class BotBase {
     private boolean sawOnTarget = false;
     private BlockPos obstruction = null;
     private boolean failedOnUnbreakable = false;
+    private String failReason = "failed";
     private Block digTargetBlock = null;
 
     /** The last block actually broken, so the next pick can stay with it. */
@@ -180,6 +184,7 @@ public abstract class BotBase {
             return;
         }
         updateStuck();
+        noteBreakSinceLastTick();
         onTickRunning();
     }
 
@@ -408,6 +413,25 @@ public abstract class BotBase {
         digAimPoint = null;
     }
 
+    /**
+     * The game breaks a block inside its own tick, before any mod sees the
+     * end of that tick. By the time the bots run, a block that just went is
+     * already air, and every caller checks "is this still worth digging"
+     * before calling tickDig -- so tickDig's completion step almost never ran
+     * for a block that actually broke, and revival and chest-appearance
+     * detection with it. Recorded here instead, before anything looks at it.
+     *
+     * Only the revival watch: the pause between blocks and the seam memory
+     * that tickDig's own completion also sets are left as they have been in
+     * practice, so the way the bot moves does not change.
+     */
+    private void noteBreakSinceLastTick() {
+        if (digTarget == null) return;
+        if (mc.theWorld.getBlockState(digTarget).getBlock() != Blocks.air) return;
+        watchForRevival(digTarget, digTargetBlock);
+        clearDigTarget();
+    }
+
     protected void abortDig() {
         Input.setAttack(false);
         clearDigTarget();
@@ -448,6 +472,19 @@ public abstract class BotBase {
         if (pos == null) return FAILED;
         long now = System.currentTimeMillis();
 
+        // Already gone: done. Checked before the aim code, which would
+        // otherwise try to aim at the air and report it blocked or failed.
+        if (mc.theWorld.getBlockState(pos).getBlock() == Blocks.air) {
+            if (pos.equals(digTarget)) {
+                lastMinedPos = pos;
+                lastMinedBlock = digTargetBlock;
+                watchForRevival(pos, digTargetBlock);
+                clearDigTarget();
+                nextActionAt = now + actionPause();
+            }
+            return DONE;
+        }
+
         if (!pos.equals(digTarget)) {
             if (now < nextActionAt) return WORKING;
 
@@ -459,6 +496,7 @@ public abstract class BotBase {
             sawOnTarget = false;
             obstruction = null;
             failedOnUnbreakable = false;
+            failReason = "failed";
             lastOnTargetAt = now;
             // Swap tools before the first swing: changing slot mid-dig throws
             // away all accumulated break progress. The swap itself is delayed a
@@ -514,22 +552,13 @@ public abstract class BotBase {
             pendingSlot = -1;
         }
 
-        Block block = mc.theWorld.getBlockState(pos).getBlock();
-        if (block == Blocks.air) {
-            lastMinedPos = pos;
-            lastMinedBlock = digTargetBlock;
-            // The only place that still knows what was standing here.
-            watchForRevival(pos, digTargetBlock);
-            clearDigTarget();
-            nextActionAt = now + actionPause();
-            return DONE;
-        }
         if (isUnbreakable(pos)) {
             failedOnUnbreakable = true;
             abortDig();
             return FAILED;
         }
-        if (now - digStart > DIG_TIMEOUT_MS) {
+        if (now - digStart > digTimeoutMs(pos)) {
+            failReason = "took longer than the block should (" + (now - digStart) / 1000 + "s)";
             abortDig();
             return FAILED;
         }
@@ -594,12 +623,14 @@ public abstract class BotBase {
         // Checked outside the rotator branch: a constantly re-aiming camera
         // used to starve this and let the full dig timeout run instead.
         if (!sawOnTarget && aimSettledAt != 0L && now - aimSettledAt > AIM_FAIL_MS) {
+            failReason = "crosshair never landed on it";
             abortDig();
             return FAILED;
         }
         // Was on it, then lost it and never got back. Without this the stall
         // ran on to the full dig timeout.
         if (sawOnTarget && now - lastOnTargetAt > OFF_TARGET_FAIL_MS) {
+            failReason = "crosshair slid off it and never came back";
             abortDig();
             return FAILED;
         }
@@ -627,6 +658,37 @@ public abstract class BotBase {
     /** Whether the last FAILED was caused by something that cannot be removed. */
     protected boolean failedOnUnbreakable() {
         return failedOnUnbreakable;
+    }
+
+    /** Why the last FAILED happened, for the log. */
+    protected String failReason() {
+        return failReason;
+    }
+
+    /**
+     * Button down with the crosshair on the block right now: a dig that is
+     * going somewhere, however long the block takes.
+     */
+    protected boolean isHittingTarget() {
+        return digTarget != null && sawOnTarget
+                && System.currentTimeMillis() - lastOnTargetAt < CLICK_GRACE_MS;
+    }
+
+    /**
+     * How long a dig may run before it counts as stuck: the game's own
+     * figure for this block with what is in hand, plus the usual margin for
+     * aiming, the tool swap and lag. A flat limit cut off anything slow --
+     * a chest by hand takes almost four seconds, stone by hand seven and a
+     * half.
+     */
+    private long digTimeoutMs(BlockPos pos) {
+        long expected = 0L;
+        try {
+            float perTick = mc.theWorld.getBlockState(pos).getBlock()
+                    .getPlayerRelativeBlockHardness(mc.thePlayer, mc.theWorld, pos);
+            if (perTick > 0f) expected = (long) Math.ceil(1.0f / perTick) * 50L;
+        } catch (Exception ignored) { }
+        return DIG_TIMEOUT_MS + Math.min(expected, MAX_EXTRA_DIG_MS);
     }
 
     protected BlockPos getObstruction() {

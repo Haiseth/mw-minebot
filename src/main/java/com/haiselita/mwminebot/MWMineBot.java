@@ -2,9 +2,11 @@ package com.haiselita.mwminebot;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemShears;
+import net.minecraft.item.ItemTool;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.player.PlayerDestroyItemEvent;
 import net.minecraftforge.event.entity.player.PlayerDestroyItemEvent;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
@@ -70,11 +72,19 @@ public class MWMineBot {
     /**
      * A pickaxe or axe wearing out mid-run is easy to miss, and everything
      * after it is slower without saying why.
+     *
+     * Only a digging tool, and only while a bot is running. The game fires
+     * this event whenever a stack runs out on use -- placing the last block
+     * of a stack, throwing the last ender pearl, armour breaking -- and all
+     * of those used to set this sound off out of nowhere.
      */
     @SubscribeEvent
     public void onItemBroken(PlayerDestroyItemEvent event) {
         Minecraft mc = Minecraft.getMinecraft();
         if (event.entityPlayer != mc.thePlayer || event.original == null) return;
+        if (!miningBot.isRunning() && !tunnelBot.isRunning()) return;
+        Item item = event.original.getItem();
+        if (!(item instanceof ItemTool) && !(item instanceof ItemShears)) return;
         try {
             log("Your " + event.original.getDisplayName() + " broke");
             if (mc.thePlayer != null) mc.thePlayer.playSound("note.pling", 1.0F, 0.5F);

@@ -309,18 +309,23 @@ public class MiningBot extends BotBase {
     // ---- mining ----
 
     private void mineTarget(long now) {
-        boolean stillValid = targetIsObstruction
-                ? isDiggable(target)
-                : isTarget(target);
+        // Gone to air means it broke -- the game breaks blocks inside its own
+        // tick, before this runs -- so it takes the DONE path below like any
+        // other finished block, instead of being dropped as "not a target".
+        boolean broke = blockAt(target) == Blocks.air;
+        if (!broke) {
+            boolean stillValid = targetIsObstruction
+                    ? isDiggable(target)
+                    : isTarget(target);
 
-        if (!stillValid) {
-            // Always logged: whatever this was, it is being dropped without
-            // ever having been broken, which is exactly the case worth being
-            // able to check afterwards.
-            MWMineBot.log("No longer a valid target, dropping"
-                    + (isCursed(target) ? " (marked unbreakable)" : "") + ": " + describe(target));
-            clearTarget();
-            return;
+            if (!stillValid) {
+                // Always logged: dropped without ever having been broken,
+                // which is exactly the case worth being able to check later.
+                MWMineBot.log("No longer a valid target, dropping"
+                        + (isCursed(target) ? " (marked unbreakable)" : "") + ": " + describe(target));
+                clearTarget();
+                return;
+            }
         }
 
         int r = tickDig(target);
@@ -353,10 +358,10 @@ public class MiningBot extends BotBase {
             if (failedOnUnbreakable()) {
                 giveUpOn(target, "blocked by something unbreakable");
             } else {
-                // The ordinary aim-timeout case: the crosshair never
-                // settled on the block, or settled and then lost it. Retried
-                // shortly (RETRY_MS), not given up on for good.
-                parkTarget(target, "aim never settled, retrying shortly");
+                // Aim never landed, the block was lost, or the dig ran past
+                // what the block should take. Retried shortly (RETRY_MS),
+                // not given up on for good.
+                parkTarget(target, "dig failed (" + failReason() + "), retrying shortly");
             }
             clearTarget();
         }
@@ -380,12 +385,17 @@ public class MiningBot extends BotBase {
         lastZ = mc.thePlayer.posZ;
 
         boolean moved = Math.sqrt(dx * dx + dy * dy + dz * dz) > 0.02;
+        // Standing still hitting a block is not being stuck. A chest by hand
+        // takes almost four seconds, and this used to call that a stall at
+        // three and walk off with it nearly broken. tickDig's own timeout,
+        // sized to the block, bounds a dig that really is going nowhere.
+        boolean hitting = isHittingTarget();
         boolean switched = (target != null && !target.equals(watchTarget))
                 || (destination != null && !destination.equals(watchDest));
         watchTarget = target;
         watchDest = destination;
 
-        if (lastActionAt == 0L || moved || switched) {
+        if (lastActionAt == 0L || moved || switched || hitting) {
             lastActionAt = now;
             return false;
         }
