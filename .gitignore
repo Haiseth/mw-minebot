@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+
+# Minecraft / Forge
+run/
+logs/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Eclipse
+bin/
+*.launch
+.settings/
+.metadata/
+.classpath
+.project
+
+# VS Code
+.vscode/
+
+# OS / Other
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

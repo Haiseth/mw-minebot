@@ -1,0 +1,16 @@
+[
+{
+  "modid": "mwminebot",
+  "name": "useful MW",
+  "description": "Mining and tunnel bot for Mega Walls. Will not run on minemen.club.",
+  "version": "${version}",
+  "mcversion": "${mcversion}",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["haiselita"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
