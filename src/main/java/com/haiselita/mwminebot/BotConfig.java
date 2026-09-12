@@ -60,7 +60,7 @@ public class BotConfig {
     public static boolean limitHeight2 = false;
 
     /** Time for one look-at, in ms. */
-    public static long rotateDurationMs = 80L;
+    public static long rotateDurationMs = 220L;
 
     /** Interpolation curve used for every look-at. */
     public static Rotator.Curve curve = Rotator.Curve.SMOOTHERSTEP;

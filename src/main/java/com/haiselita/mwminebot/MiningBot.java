@@ -1154,14 +1154,30 @@ public class MiningBot extends BotBase {
 
     @Override
     protected void onChestAppeared(BlockPos p) {
-        if (!BotConfig.mineChest || blacklist.containsKey(p)) return;
+        // Not gated on the position's own blacklist: that entry, if any, is a
+        // leftover RETRY_MS from whatever used to be at p before it became a
+        // chest, and has nothing to do with whether the chest itself is
+        // worth going for.
+        if (!BotConfig.mineChest) return;
         ownChests.put(p, System.currentTimeMillis() + OWN_CHEST_KEEP_MS);
-        MWMineBot.info("§6Chest appeared where we dug → taking it next");
+        MWMineBot.info("§6Chest appeared at " + p.getX() + "," + p.getY() + "," + p.getZ() + " -> taking it next");
+    }
+
+    /** True when an actual chest block is sitting at p right now. */
+    private boolean isChestHere(BlockPos p) {
+        Block b = blockAt(p);
+        return b == Blocks.chest || b == Blocks.trapped_chest;
     }
 
     /**
      * Nearest chest from our own digging that is still there and still
      * wanted. Anything taken, protected, blacklisted or stale is dropped.
+     *
+     * Deliberately checks isChestHere rather than isTarget: isTarget also
+     * fails on isCursed or BotConfig.mineChest going false for reasons that
+     * have nothing to do with whether this exact chest is still standing, and
+     * that used to drop a perfectly good chest from tracking -- which looks
+     * exactly like giving up on something never actually taken.
      */
     private BlockPos nextOwnChest(long now) {
         BlockPos best = null;
@@ -1170,10 +1186,28 @@ public class MiningBot extends BotBase {
         while (it.hasNext()) {
             Map.Entry<BlockPos, Long> e = it.next();
             BlockPos p = e.getKey();
-            if (now > e.getValue() || !isTarget(p) || blacklist.containsKey(p)) {
+
+            if (now > e.getValue()) {
+                MWMineBot.log("Gave up chasing chest at " + p.getX() + "," + p.getY() + "," + p.getZ()
+                        + " (never got there in time)");
                 it.remove();
                 continue;
             }
+            if (!BotConfig.mineChest) {
+                it.remove();
+                continue;
+            }
+            if (!isChestHere(p)) {
+                MWMineBot.log("Chest at " + p.getX() + "," + p.getY() + "," + p.getZ()
+                        + " is gone (someone else took it, or it was never really one) -> dropping");
+                it.remove();
+                continue;
+            }
+            if (blacklist.containsKey(p)) {
+                it.remove();
+                continue;
+            }
+
             double d = distanceToBlock(p);
             if (d < bestD) {
                 bestD = d;
