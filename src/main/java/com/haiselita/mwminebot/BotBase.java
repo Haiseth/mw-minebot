@@ -92,7 +92,6 @@ public abstract class BotBase {
 
     private boolean running = false;
     private final Set<KeyBinding> held = new HashSet<KeyBinding>();
-    private final Set<String> reportedWarnings = new HashSet<String>();
 
     private BlockPos digTarget = null;
     private Vec3 digAimPoint = null;
@@ -212,19 +211,26 @@ public abstract class BotBase {
             String n = needle.toLowerCase();
             if (n.isEmpty()) continue;
             if (lower.contains(n)) {
+                // Always logged, not gated behind debug: whatever the bot
+                // happened to be digging is abandoned the instant this
+                // fires, so the exact line that caused it has to be
+                // recoverable afterwards, not only when debug log was
+                // already on.
+                MWMineBot.log("Chat matched \"" + needle + "\" -> treating current target as blocked: " + plain);
                 fireBlocked(null);
                 return;
             }
         }
 
         // Fallback for chest wording we have not seen yet, kept narrow so an
-        // unrelated red line cannot blacklist a perfectly good block.
+        // unrelated red line cannot blacklist a perfectly good block. Any red
+        // line naming a chest anywhere on the server -- not necessarily one
+        // we tried to break -- can trip this, so every match is logged, not
+        // just the first of its kind, to make that distinguishable later.
         if (formatted != null && (formatted.contains("§c") || formatted.contains("§4"))) {
             for (String hint : CHEST_HINTS) {
                 if (lower.contains(hint.toLowerCase())) {
-                    if (reportedWarnings.add(plain)) {
-                        MWMineBot.info("§7Red text read as chest protection: §f" + plain);
-                    }
+                    MWMineBot.log("Red text matched \"" + hint + "\" -> treating current target as blocked: " + plain);
                     fireBlocked(null);
                     return;
                 }

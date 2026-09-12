@@ -59,10 +59,7 @@ public class BotConfig {
     /** Mine only at foot and head height, never up or down. */
     public static boolean limitHeight2 = false;
 
-    /**
-     * Time for one look-at. ab-mod uses 40ms; at 200fps that is 8 frames,
-     * which is already usable once the rotation is sampled per frame.
-     */
+    /** Time for one look-at, in ms. */
     public static long rotateDurationMs = 80L;
 
     /** Interpolation curve used for every look-at. */

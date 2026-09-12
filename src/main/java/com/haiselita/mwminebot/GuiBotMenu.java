@@ -177,8 +177,6 @@ public class GuiBotMenu extends GuiScreen {
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawDefaultBackground();
-        drawCenteredString(fontRendererObj, "useful MW", width / 2, height / 6 - 34, 0xFFFFFF);
-        drawCenteredString(fontRendererObj, "§7" + ServerGuard.statusText(), width / 2, height / 6 - 23, 0xAAAAAA);
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 

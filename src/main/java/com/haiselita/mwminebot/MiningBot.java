@@ -314,6 +314,11 @@ public class MiningBot extends BotBase {
                 : isTarget(target);
 
         if (!stillValid) {
+            // Always logged: whatever this was, it is being dropped without
+            // ever having been broken, which is exactly the case worth being
+            // able to check afterwards.
+            MWMineBot.log("No longer a valid target, dropping"
+                    + (isCursed(target) ? " (marked unbreakable)" : "") + ": " + describe(target));
             clearTarget();
             return;
         }
@@ -341,14 +346,17 @@ public class MiningBot extends BotBase {
                 }
                 setTarget(obs, true);
             } else {
-                parkTarget(target);
+                parkTarget(target, "blocked, nothing diggable to switch to");
                 clearTarget();
             }
         } else if (r == FAILED) {
             if (failedOnUnbreakable()) {
                 giveUpOn(target, "blocked by something unbreakable");
             } else {
-                parkTarget(target);
+                // The ordinary aim-timeout case: the crosshair never
+                // settled on the block, or settled and then lost it. Retried
+                // shortly (RETRY_MS), not given up on for good.
+                parkTarget(target, "aim never settled, retrying shortly");
             }
             clearTarget();
         }
@@ -383,10 +391,13 @@ public class MiningBot extends BotBase {
         }
         if (now - lastActionAt < WATCHDOG_MS) return false;
 
-        MWMineBot.info("§cStalled: digging=" + (target == null ? "none" : describe(target))
+        // Always logged, not debug-gated: this is the bot giving up on
+        // whatever it was doing without ever finishing it, which is exactly
+        // what needs to be traceable after the fact.
+        MWMineBot.log("Stalled: digging=" + (target == null ? "none" : describe(target))
                 + " destination=" + (destination == null ? "none"
                         : destination.getX() + "," + destination.getY() + "," + destination.getZ())
-                + " → starting over");
+                + " -> starting over");
 
         if (target != null) {
             blacklist.put(target, now + RETRY_MS);
@@ -452,16 +463,21 @@ public class MiningBot extends BotBase {
         setTarget(p, false);
     }
 
-    private void parkTarget(BlockPos p) {
+    private void parkTarget(BlockPos p, String why) {
         blacklist.put(p, System.currentTimeMillis() + RETRY_MS);
         if (p.equals(pendingTarget)) pendingTarget = null;
+        // Temporary, not a give-up -- but still a block left un-broken, so
+        // it goes in the log the same way.
+        MWMineBot.log(why + ": " + describe(p));
     }
 
     private void giveUpOn(BlockPos p, String why) {
         long now = System.currentTimeMillis();
         blacklist.put(p, now + BLACKLIST_MS);
         pickedFirst = false;
-        MWMineBot.info("§7" + why + ": " + describe(p));
+        // Always logged: this is a block abandoned before it broke, which is
+        // exactly the case worth being able to check afterwards.
+        MWMineBot.log(why + ": " + describe(p));
         noteUndiggable(now);
     }
 
